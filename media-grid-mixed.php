@@ -1,12 +1,10 @@
 <?php
 /**
  * Template Name: Media Grid - Mixed Images & Videos
- * Description: Proper video thumbnails using ffmpeg cache
+ * Description: Fixed pagination for Post Name permalinks
  */
 
 get_header(); 
-
-$current_url = get_permalink();
 ?>
 
 <div style="max-width: 1400px; margin: 40px auto; padding: 20px;">
@@ -42,7 +40,7 @@ $current_url = get_permalink();
     }
 
     $per_page = 80;
-    $current_page = max(1, intval($_GET['page'] ?? 1));
+    $current_page = max(1, intval($_GET['paged'] ?? 1));
 
     $items = [];
     $subfolders = [];
@@ -74,16 +72,15 @@ $current_url = get_permalink();
     echo '<p><strong>Location:</strong> ' . esc_html($current_sub ?: 'Root') . ' — ' . $total_items . ' files</p>';
     ?>
 
-    <!-- Subfolders -->
     <?php if (!empty($subfolders) || $current_sub): ?>
     <div style="margin:20px 0 30px 0;">
         <?php if ($current_sub): ?>
-            <a href="<?php echo add_query_arg(['sub' => dirname($current_sub), 'page' => 1], $current_url); ?>">← Back</a>
+            <a href="<?php echo esc_url(add_query_arg(['sub' => dirname($current_sub), 'paged' => 1])); ?>">← Back</a>
         <?php endif; ?>
 
         <strong>Subfolders:</strong><br><br>
         <?php foreach ($subfolders as $sub): ?>
-            <a href="<?php echo add_query_arg(['sub' => trim($current_sub.'/'.$sub,'/'), 'page' => 1], $current_url); ?>" 
+            <a href="<?php echo esc_url(add_query_arg(['sub' => trim($current_sub.'/'.$sub,'/'), 'paged' => 1])); ?>" 
                style="display:inline-block; margin:6px; padding:10px 16px; background:#f0f0f0; border-radius:8px;">
                 📁 <?php echo esc_html($sub); ?>
             </a>
@@ -128,17 +125,16 @@ $current_url = get_permalink();
             <?php endforeach; ?>
         </div>
 
-        <!-- Pagination -->
         <?php if ($total_pages > 1): ?>
-        <div style="margin:50px 0; text-align:center;">
+        <div style="margin:50px 0; text-align:center; font-size:1.2em;">
             <?php if ($current_page > 1): ?>
-                <a href="<?php echo add_query_arg(['sub' => $current_sub, 'page' => $current_page-1], $current_url); ?>">← Previous</a>
+                <a href="<?php echo esc_url(add_query_arg(['sub' => $current_sub, 'paged' => $current_page-1])); ?>">← Previous</a>
             <?php endif; ?>
 
             <span style="margin:0 20px;">Page <strong><?php echo $current_page; ?></strong> of <?php echo $total_pages; ?></span>
 
             <?php if ($current_page < $total_pages): ?>
-                <a href="<?php echo add_query_arg(['sub' => $current_sub, 'page' => $current_page+1], $current_url); ?>">Next →</a>
+                <a href="<?php echo esc_url(add_query_arg(['sub' => $current_sub, 'paged' => $current_page+1])); ?>">Next →</a>
             <?php endif; ?>
         </div>
         <?php endif; ?>
@@ -185,7 +181,6 @@ function closeModal() {
 </style>
 
 <?php
-// ====================== VIDEO THUMBNAIL FUNCTION ======================
 function mixed_get_video_thumbnail($filepath, $filename) {
     $cache_dir = WP_CONTENT_DIR . '/video-thumbs/';
     if (!is_dir($cache_dir)) mkdir($cache_dir, 0755, true);
@@ -196,10 +191,7 @@ function mixed_get_video_thumbnail($filepath, $filename) {
 
     if (file_exists($thumb_path)) return $thumb_url;
 
-    $cmd = "ffmpeg -i " . escapeshellarg($filepath) . 
-           " -ss 00:00:02 -vframes 1 -q:v 5 " . 
-           escapeshellarg($thumb_path) . " 2>&1";
-
+    $cmd = "ffmpeg -i " . escapeshellarg($filepath) . " -ss 00:00:02 -vframes 1 -q:v 5 " . escapeshellarg($thumb_path) . " 2>&1";
     exec($cmd);
 
     return file_exists($thumb_path) ? $thumb_url : 'https://via.placeholder.com/280x200/333/fff?text=Video';

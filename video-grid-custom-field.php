@@ -1,10 +1,11 @@
 <?php
 /**
- * Template Name: Video Grid - Custom Field Folder (Advanced)
- * Description: Final fixed URL generation
+ * Template Name: Video Grid - Custom Field Folder
+ * Description: Fixed pagination for Post Name permalinks
  */
 
-get_header(); ?>
+get_header(); 
+?>
 
 <div style="max-width: 1400px; margin: 40px auto; padding: 20px;">
     <h1><?php the_title(); ?></h1>
@@ -19,7 +20,6 @@ get_header(); ?>
     }
 
     $video_folder = rtrim($custom_path, '/') . '/';
-    $video_folder = str_replace(['../', '..\\'], '', $video_folder);
 
     if (!is_dir($video_folder)) {
         echo '<p style="color:red;">Folder not found.</p>';
@@ -28,7 +28,7 @@ get_header(); ?>
     }
 
     $display_name = basename(rtrim($custom_path, '/'));
-    echo '<p><strong>Folder:</strong> ' . esc_html($display_name) . '</p>';
+    echo '<p><strong>Video Folder:</strong> ' . esc_html($display_name) . '</p>';
 
     $current_sub = isset($_GET['sub']) ? sanitize_text_field($_GET['sub']) : '';
     $full_path = $video_folder . ltrim($current_sub, '/');
@@ -39,8 +39,11 @@ get_header(); ?>
         $current_sub = '';
     }
 
-    $subfolders = [];
+    $per_page = 80;
+    $current_page = max(1, intval($_GET['paged'] ?? 1));
+
     $videos = [];
+    $subfolders = [];
 
     foreach (scandir($full_path) as $item) {
         if ($item === '.' || $item === '..') continue;
@@ -50,7 +53,7 @@ get_header(); ?>
             $subfolders[] = $item;
         } else {
             $ext = strtolower(pathinfo($item, PATHINFO_EXTENSION));
-            if (in_array($ext, ['mov','mpg','mpeg','mp4','webm'])) {
+            if (in_array($ext, ['mp4','mov','webm','mpg','mpeg'])) {
                 $videos[] = $item;
             }
         }
@@ -59,18 +62,23 @@ get_header(); ?>
     usort($videos, fn($a,$b) => filemtime($full_path.$b) - filemtime($full_path.$a));
     sort($subfolders);
 
-    echo '<p><strong>Location:</strong> ' . esc_html($current_sub ?: 'Root') . '</p>';
+    $total_videos = count($videos);
+    $total_pages = ceil($total_videos / $per_page);
+    $offset = ($current_page - 1) * $per_page;
+    $paged_videos = array_slice($videos, $offset, $per_page);
+
+    echo '<p><strong>Location:</strong> ' . esc_html($current_sub ?: 'Root') . ' — ' . $total_videos . ' videos</p>';
     ?>
 
     <?php if (!empty($subfolders) || $current_sub): ?>
     <div style="margin:20px 0 30px 0;">
         <?php if ($current_sub): ?>
-            <a href="?sub=<?php echo urlencode(dirname($current_sub)); ?>">← Back</a>
+            <a href="<?php echo esc_url(add_query_arg(['sub' => dirname($current_sub), 'paged' => 1])); ?>">← Back</a>
         <?php endif; ?>
 
         <strong>Subfolders:</strong><br><br>
         <?php foreach ($subfolders as $sub): ?>
-            <a href="?sub=<?php echo urlencode(trim($current_sub.'/'.$sub,'/')); ?>" 
+            <a href="<?php echo esc_url(add_query_arg(['sub' => trim($current_sub.'/'.$sub,'/'), 'paged' => 1])); ?>" 
                style="display:inline-block; margin:6px; padding:10px 16px; background:#f0f0f0; border-radius:8px;">
                 📁 <?php echo esc_html($sub); ?>
             </a>
@@ -78,65 +86,66 @@ get_header(); ?>
     </div>
     <?php endif; ?>
 
-    <?php if (empty($videos)): ?>
+    <?php if (empty($paged_videos)): ?>
         <p>No videos found.</p>
     <?php else: ?>
-        <p><strong>Found <?php echo count($videos); ?> videos</strong></p>
-
-        <div class="video-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 22px;">
-            <?php foreach ($videos as $video):
+        <div class="video-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px;">
+            <?php foreach ($paged_videos as $video):
                 $file_path = $full_path . $video;
-
-                // === STRONG URL FIX (this is the part that was broken) ===
-                $relative = str_replace(ABSPATH, '', $file_path);           // normal case
-                $relative = str_replace('/wp-content/wp-content/', '/wp-content/', $relative); // remove double
-                $relative = ltrim($relative, '/');
-                $url = content_url($relative);
-
-                // Extra cleanup for your specific case
-                $url = str_replace('/wp-content/wp-content/', '/wp-content/', $url);
-
-                $ext = strtolower(pathinfo($video, PATHINFO_EXTENSION));
-                $mime = ($ext === 'mov') ? 'video/quicktime' :
-                        ($ext === 'webm') ? 'video/webm' :
-                        (in_array($ext, ['mpg','mpeg'])) ? 'video/mpeg' : 'video/mp4';
-
-                $thumb = video_grid_get_thumbnail($file_path, $video);
+                $url = content_url(str_replace(ABSPATH . 'wp-content/', '', $file_path));
+                $thumb = video_get_thumbnail($file_path, $video);
             ?>
-                <div class="video-card" onclick="playVideo('<?php echo esc_js($url); ?>', '<?php echo esc_js($mime); ?>', '<?php echo esc_js($video); ?>')">
-                    <div style="position:relative; background:#000; border-radius:8px; overflow:hidden;">
-                        <img src="<?php echo esc_url($thumb); ?>" alt="<?php echo esc_attr($video); ?>" loading="lazy" style="width:100%; height:190px; object-fit:cover;">
-                        <div style="position:absolute; bottom:10px; right:10px; background:rgba(0,0,0,0.75); color:white; padding:4px 10px; border-radius:4px;">▶ Play</div>
+                <div class="video-card" style="background:#f9f9f9; padding:10px; border-radius:12px; cursor:pointer;" onclick="playVideo('<?php echo esc_js($url); ?>', '<?php echo esc_js($video); ?>')">
+                    <div style="position:relative;">
+                        <img src="<?php echo esc_url($thumb); ?>" 
+                             alt="<?php echo esc_attr($video); ?>" 
+                             loading="lazy"
+                             style="width:100%; height:200px; object-fit:cover; border-radius:8px;">
+                        <div style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); background:rgba(0,0,0,0.75); color:white; border-radius:50%; width:70px; height:70px; display:flex; align-items:center; justify-content:center; font-size:32px; border:3px solid white;">
+                            ▶
+                        </div>
                     </div>
-                    <p style="margin:12px 0 0 0; font-size:0.95em; word-break:break-all;"><?php echo esc_html($video); ?></p>
+                    <p style="margin:10px 0 0 0; font-size:0.9em; text-align:center; word-break:break-all;">
+                        <?php echo esc_html($video); ?>
+                    </p>
                 </div>
             <?php endforeach; ?>
         </div>
+
+        <?php if ($total_pages > 1): ?>
+        <div style="margin:50px 0; text-align:center; font-size:1.2em;">
+            <?php if ($current_page > 1): ?>
+                <a href="<?php echo esc_url(add_query_arg(['sub' => $current_sub, 'paged' => $current_page-1])); ?>">← Previous</a>
+            <?php endif; ?>
+
+            <span style="margin:0 20px;">Page <strong><?php echo $current_page; ?></strong> of <?php echo $total_pages; ?></span>
+
+            <?php if ($current_page < $total_pages): ?>
+                <a href="<?php echo esc_url(add_query_arg(['sub' => $current_sub, 'paged' => $current_page+1])); ?>">Next →</a>
+            <?php endif; ?>
+        </div>
+        <?php endif; ?>
     <?php endif; ?>
 </div>
 
 <!-- Video Modal -->
-<div id="videoModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.97); z-index:99999; align-items:center; justify-content:center;">
-    <div style="max-width:1150px; width:92%; background:#111; border-radius:12px; overflow:hidden;">
-        <div style="padding:12px 20px; background:#1f1f1f; display:flex; justify-content:space-between; align-items:center;">
-            <h3 id="modalTitle" style="margin:0; color:#fff;"></h3>
-            <button onclick="closeModal()" style="background:none; border:none; color:#fff; font-size:32px; cursor:pointer;">×</button>
+<div id="videoModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.95); z-index:99999; align-items:center; justify-content:center;">
+    <div style="max-width:1100px; width:90%; background:#111; border-radius:12px; overflow:hidden;">
+        <div style="padding:12px 20px; background:#1f1f1f; display:flex; justify-content:space-between;">
+            <h3 id="modalTitle" style="margin:0; color:white;"></h3>
+            <button onclick="closeModal()" style="background:none; border:none; color:white; font-size:30px;">×</button>
         </div>
         <div style="padding:15px; background:#000;">
-            <video id="modalVideo" controls autoplay style="width:100%; max-height:72vh;" preload="metadata"></video>
-        </div>
-        <div style="padding:15px; text-align:center; background:#1f1f1f;">
-            <a id="downloadBtn" href="#" download style="color:#4da6ff;">↓ Download Original</a>
+            <video id="modalVideo" controls autoplay style="width:100%; max-height:70vh;" preload="metadata"></video>
         </div>
     </div>
 </div>
 
 <script>
-function playVideo(url, mime, title) {
+function playVideo(url, title) {
     document.getElementById('modalTitle').textContent = title;
     const video = document.getElementById('modalVideo');
-    video.innerHTML = '<source src="' + url + '" type="' + mime + '">';
-    document.getElementById('downloadBtn').href = url;
+    video.innerHTML = `<source src="${url}" type="video/mp4">`;
     document.getElementById('videoModal').style.display = 'flex';
     video.load();
     video.play();
@@ -151,12 +160,11 @@ function closeModal() {
 </script>
 
 <style>
-.video-card { background:#f9f9f9; padding:12px; border-radius:12px; cursor:pointer; transition:0.25s; }
-.video-card:hover { transform:translateY(-6px); box-shadow:0 10px 20px rgba(0,0,0,0.15); }
+.video-card:hover { transform: scale(1.03); transition: 0.3s; }
 </style>
 
 <?php
-function video_grid_get_thumbnail($filepath, $filename) {
+function video_get_thumbnail($filepath, $filename) {
     $cache_dir = WP_CONTENT_DIR . '/video-thumbs/';
     if (!is_dir($cache_dir)) mkdir($cache_dir, 0755, true);
 
@@ -168,7 +176,8 @@ function video_grid_get_thumbnail($filepath, $filename) {
 
     $cmd = "ffmpeg -i " . escapeshellarg($filepath) . " -ss 00:00:02 -vframes 1 -q:v 5 " . escapeshellarg($thumb_path) . " 2>&1";
     exec($cmd);
-    return file_exists($thumb_path) ? $thumb_url : 'https://via.placeholder.com/280x190/333/fff?text=No+Preview';
+
+    return file_exists($thumb_path) ? $thumb_url : 'https://via.placeholder.com/280x200/333/fff?text=Video';
 }
 ?>
 
